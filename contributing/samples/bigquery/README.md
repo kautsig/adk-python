@@ -25,6 +25,13 @@ distributed via the `google.adk.tools.bigquery` module. These tools include:
 
   Runs a SQL query in BigQuery.
 
+1. `chat`
+
+  Natural language-in, natural language-out chat tool that answers questions
+  about structured data in BigQuery. Provide a one-stop solution for generating
+  insights from data.
+
+
 ## How to use
 
 Set up environment variables in your `.env` file for using
