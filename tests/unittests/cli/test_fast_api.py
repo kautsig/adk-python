@@ -188,6 +188,9 @@ def mock_agent_loader():
     def load_agent(self, app_name):
       return root_agent
 
+    def list_agents(self):
+      return ["test_app"]
+
   return MockAgentLoader(".")
 
 
@@ -445,7 +448,7 @@ def test_app(
           return_value=mock_memory_service,
       ),
       patch(
-          "google.adk.cli.fast_api.AgentLoader",
+          "google.adk.cli.fast_api.FileSystemAgentLoader",
           return_value=mock_agent_loader,
       ),
       patch(
@@ -596,7 +599,7 @@ def test_app_with_a2a(
           return_value=mock_memory_service,
       ),
       patch(
-          "google.adk.cli.fast_api.AgentLoader",
+          "google.adk.cli.fast_api.FileSystemAgentLoader",
           return_value=mock_agent_loader,
       ),
       patch(

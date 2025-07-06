@@ -25,7 +25,7 @@ from typing import AsyncGenerator
 from typing import Optional
 import uuid
 
-from ..agents import Agent
+from ..agents.llm_agent import Agent
 from ..artifacts.base_artifact_service import BaseArtifactService
 from ..evaluation.constants import MISSING_EVAL_DEPENDENCIES_MESSAGE
 from ..evaluation.eval_case import EvalCase
