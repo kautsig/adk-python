@@ -226,7 +226,17 @@ class LocalEvalSetsManager(EvalSetsManager):
 
   @override
   def list_eval_sets(self, app_name: str) -> list[str]:
-    """Returns a list of EvalSets that belong to the given app_name."""
+    """Returns a list of EvalSets that belong to the given app_name.
+
+    Args:
+      app_name: The app name to list the eval sets for.
+
+    Returns:
+      A list of EvalSet ids.
+
+    Raises:
+      FileNotFoundError: If the eval directory for the app is not found.
+    """
     eval_set_file_path = os.path.join(self._agents_dir, app_name)
     eval_sets = []
     for file in os.listdir(eval_set_file_path):
