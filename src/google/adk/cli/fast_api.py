@@ -51,6 +51,7 @@ from starlette.types import Lifespan
 from typing_extensions import override
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+import uuid
 
 from ..agents import RunConfig
 from ..agents.live_request_queue import LiveRequest
@@ -68,7 +69,7 @@ from ..evaluation.eval_metrics import EvalMetricResultPerInvocation
 from ..evaluation.eval_result import EvalSetResult
 from ..evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
 from ..evaluation.local_eval_sets_manager import LocalEvalSetsManager
-from ..events.event import Event
+from ..events.event import Event, EventActions
 from ..memory.in_memory_memory_service import InMemoryMemoryService
 from ..memory.vertex_ai_memory_bank_service import VertexAiMemoryBankService
 from ..memory.vertex_ai_rag_memory_service import VertexAiRagMemoryService
@@ -175,6 +176,7 @@ class AgentRunRequest(common.BaseModel):
   session_id: str
   new_message: types.Content
   streaming: bool = False
+  new_state: Optional[dict[str, Any]] = None
 
 
 class AddSessionToEvalSetRequest(common.BaseModel):
@@ -489,6 +491,25 @@ def get_fast_api_app(
         app_name,
         eval_set_id + _EVAL_SET_FILE_EXTENSION,
     )
+
+  @app.patch(
+      "/apps/{app_name}/users/{user_id}/sessions/{session_id}",
+      response_model_exclude_none=True,
+  )
+  async def update_session(
+      app_name: str,
+      user_id: str,
+      session_id: str,
+      state: Optional[dict[str, Any]] = None,
+  ):
+    """Updates the session. Currently only state update is supported."""
+    if not state:
+      return
+
+    session = await session_service.get_session(
+        app_name=app_name, user_id=user_id, session_id=session_id
+    )
+    await _update_session_state(session, state)
 
   @app.post(
       "/apps/{app_name}/eval_sets/{eval_set_id}",
@@ -831,6 +852,10 @@ def get_fast_api_app(
     if not session:
       raise HTTPException(status_code=404, detail="Session not found")
 
+    # Updates the session state if new_state is provided
+    if req.new_state:
+      await _update_session_state(session, req.new_state)
+
     # Convert the events to properly formatted SSE
     async def event_generator():
       try:
@@ -974,6 +999,17 @@ def get_fast_api_app(
     finally:
       for task in pending:
         task.cancel()
+
+  async def _update_session_state(session: Session, new_state: dict[str, any]):
+    current_time = time.time()
+    actions_with_update = EventActions(state_delta=new_state)
+    system_event = Event(
+        invocation_id="state_update_" + str(uuid.uuid4()),
+        author="user",
+        actions=actions_with_update,
+        timestamp=current_time,
+    )
+    await session_service.append_event(session, system_event)
 
   async def _get_runner_async(app_name: str) -> Runner:
     """Returns the runner for the given app."""
