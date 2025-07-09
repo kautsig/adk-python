@@ -60,7 +60,6 @@ def _get_session_id() -> str:
   return f'{EVAL_SESSION_ID_PREFIX}{str(uuid.uuid4())}'
 
 
-@working_in_progress("Incomplete feature, don't use yet")
 class LocalEvalService(BaseEvalService):
   """An implementation of BaseEvalService, that runs the evals locally."""
 

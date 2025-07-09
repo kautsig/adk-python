@@ -36,6 +36,8 @@ class PrebuiltMetrics(Enum):
 
   RESPONSE_MATCH_SCORE = "response_match_score"
 
+  SAFETY_V1 = "safety_v1"
+
 
 MetricName: TypeAlias = Union[str, PrebuiltMetrics]
 
