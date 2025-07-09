@@ -62,6 +62,24 @@ class BaseLlmConnection:
     pass
 
   @abstractmethod
+  async def send_activity_start(self):
+    """Sends an activity start signal to mark the beginning of user input.
+    
+    This is used for manual activity control when automatic voice activity 
+    detection is disabled.
+    """
+    pass
+
+  @abstractmethod
+  async def send_activity_end(self):
+    """Sends an activity end signal to mark the end of user input.
+    
+    This is used for manual activity control when automatic voice activity 
+    detection is disabled.
+    """
+    pass
+
+  @abstractmethod
   async def receive(self) -> AsyncGenerator[LlmResponse, None]:
     """Receives the model response using the llm server connection.
 

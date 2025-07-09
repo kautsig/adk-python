@@ -104,6 +104,16 @@ class GeminiLlmConnection(BaseLlmConnection):
     logger.debug('Sending LLM Blob: %s', input_blob)
     await self._gemini_session.send(input=input_blob)
 
+  async def send_activity_start(self):
+    """Sends an activity start signal to mark the beginning of user input."""
+    logger.debug('Sending LLM activity start signal')
+    await self._gemini_session.send(input=types.ActivityStart())
+
+  async def send_activity_end(self):
+    """Sends an activity end signal to mark the end of user input."""
+    logger.debug('Sending LLM activity end signal')
+    await self._gemini_session.send(input=types.ActivityEnd())
+
   def __build_full_text_response(self, text: str):
     """Builds a full text response.
 

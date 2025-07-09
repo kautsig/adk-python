@@ -403,6 +403,94 @@ def test_streaming_config_validation():
   assert run_config.proactivity is not None
 
 
+def test_streaming_with_activity_signals():
+  """Test streaming with manual activity start and end signals."""
+  response1 = LlmResponse(
+      turn_complete=True,
+  )
+
+  mock_model = testing_utils.MockModel.create([response1])
+
+  root_agent = Agent(
+      name='root_agent',
+      model=mock_model,
+      tools=[],
+  )
+
+  runner = testing_utils.InMemoryRunner(
+      root_agent=root_agent, response_modalities=['AUDIO']
+  )
+
+  # Create run config with manual activity control (disabled automatic VAD)
+  run_config = RunConfig(
+      realtime_input_config=types.RealtimeInputConfig(
+          automatic_activity_detection=types.AutomaticActivityDetection(
+              disabled=True
+          )
+      )
+  )
+
+  live_request_queue = LiveRequestQueue()
+  
+  # Test sending activity start signal
+  live_request_queue.send_activity_start()
+  
+  # Send some audio data
+  live_request_queue.send_realtime(
+      blob=types.Blob(data=b'\x00\xFF', mime_type='audio/pcm')
+  )
+  
+  # Test sending activity end signal
+  live_request_queue.send_activity_end()
+
+  res_events = runner.run_live(live_request_queue, run_config)
+
+  assert res_events is not None, 'Expected a list of events, got None.'
+  assert (
+      len(res_events) > 0
+  ), 'Expected at least one response, but got an empty list.'
+
+
+def test_live_request_activity_signals():
+  """Test LiveRequest supports activity start and end signals."""
+  from google.adk.agents import LiveRequest
+  
+  # Test activity start request
+  activity_start_req = LiveRequest(activity_start=True)
+  assert activity_start_req.activity_start == True
+  assert activity_start_req.activity_end == False
+  assert activity_start_req.blob is None
+  assert activity_start_req.content is None
+  assert activity_start_req.close == False
+  
+  # Test activity end request
+  activity_end_req = LiveRequest(activity_end=True)
+  assert activity_end_req.activity_end == True
+  assert activity_end_req.activity_start == False
+  assert activity_end_req.blob is None
+  assert activity_end_req.content is None
+  assert activity_end_req.close == False
+  
+  # Test that we can't have multiple signal types at once
+  with pytest.raises(ValueError):
+    LiveRequest(activity_start=True, activity_end=True)
+  
+  with pytest.raises(ValueError):
+    LiveRequest(activity_start=True, blob=types.Blob(data=b'\x00\xFF', mime_type='audio/pcm'))
+
+
+def test_live_request_queue_activity_methods():
+  """Test LiveRequestQueue has methods to send activity signals."""
+  live_request_queue = LiveRequestQueue()
+  
+  # Test that we can call the activity methods without error
+  live_request_queue.send_activity_start()
+  live_request_queue.send_activity_end()
+  
+  # Verify that requests were queued (we can't easily inspect the internal queue
+  # but this test ensures the methods exist and don't throw errors)
+
+
 def test_streaming_with_multiple_audio_configs():
   """Test streaming with multiple audio transcription configurations."""
   response1 = LlmResponse(

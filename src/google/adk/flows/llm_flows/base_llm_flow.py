@@ -194,7 +194,11 @@ class BaseLlmFlow(ABC):
       if live_request.close:
         await llm_connection.close()
         return
-      if live_request.blob:
+      if live_request.activity_start:
+        await llm_connection.send_activity_start()
+      elif live_request.activity_end:
+        await llm_connection.send_activity_end()
+      elif live_request.blob:
         # Cache audio data here for transcription
         if not invocation_context.transcription_cache:
           invocation_context.transcription_cache = []

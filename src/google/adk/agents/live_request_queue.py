@@ -18,6 +18,7 @@ from typing import Optional
 from google.genai import types
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import field_validator
 
 
 class LiveRequest(BaseModel):
@@ -30,8 +31,43 @@ class LiveRequest(BaseModel):
   """If set, send the content to the model in turn-by-turn mode."""
   blob: Optional[types.Blob] = None
   """If set, send the blob to the model in realtime mode."""
+  activity_start: bool = False
+  """If set, signal the start of user activity to the model."""
+  activity_end: bool = False
+  """If set, signal the end of user activity to the model."""
   close: bool = False
   """If set, close the queue. queue.shutdown() is only supported in Python 3.13+."""
+
+  @field_validator('activity_start', 'activity_end', 'close')
+  @classmethod
+  def validate_single_signal(cls, v, info):
+    """Validates that only one signal type is set at a time."""
+    if v and info.data:
+      # Count how many boolean flags are True
+      signal_count = sum([
+          info.data.get('activity_start', False),
+          info.data.get('activity_end', False), 
+          info.data.get('close', False),
+          v  # Current field being validated
+      ])
+      
+      # Also check if content or blob is set along with activity signals
+      has_content = bool(info.data.get('content')) or bool(info.data.get('blob'))
+      is_activity_signal = info.field_name in ['activity_start', 'activity_end']
+      
+      if is_activity_signal and has_content:
+        raise ValueError(
+            'Activity signals (activity_start, activity_end) cannot be '
+            'combined with content or blob in the same request.'
+        )
+        
+      if signal_count > 1:
+        raise ValueError(
+            'Only one signal type (activity_start, activity_end, close) '
+            'can be set per request.'
+        )
+    
+    return v
 
 
 class LiveRequestQueue:
@@ -57,6 +93,14 @@ class LiveRequestQueue:
 
   def send_realtime(self, blob: types.Blob):
     self._queue.put_nowait(LiveRequest(blob=blob))
+
+  def send_activity_start(self):
+    """Sends an activity start signal to mark the beginning of user input."""
+    self._queue.put_nowait(LiveRequest(activity_start=True))
+
+  def send_activity_end(self):
+    """Sends an activity end signal to mark the end of user input."""
+    self._queue.put_nowait(LiveRequest(activity_end=True))
 
   def send(self, req: LiveRequest):
     self._queue.put_nowait(req)
