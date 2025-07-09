@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Features
+
+* **Audio & Transcription:** Add comprehensive audio handling and transcription support
+  * Added `input_transcription` and `output_transcription` fields to `LlmResponse` and `Event` classes
+  * Implemented automatic transcription event creation and session storage for live streaming models
+  * Enhanced `GeminiLlmConnection` to properly handle server-sent transcriptions as separate events
+  * Audio transcription events are saved to session service without artifact storage overhead
+  * Maintains existing audio caching functionality alongside new transcription features
+  * **Refined Audio Cache Flushing Logic:** Implemented selective flushing based on control events:
+    * `interrupted`: flushes model audio only (user may still be speaking)
+    * `turn_complete`: flushes both user and model audio (full conversation turn done)  
+    * `generation_complete`: flushes model audio only (model finished generating)
+
 ## [1.5.0](https://github.com/google/adk-python/compare/v1.4.2...v1.5.0) (2025-06-25)
 
 
