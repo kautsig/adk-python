@@ -19,6 +19,7 @@ import asyncio
 import datetime
 import inspect
 import logging
+import time
 from typing import AsyncGenerator
 from typing import cast
 from typing import Optional
@@ -28,8 +29,13 @@ from google.genai import types
 from websockets.exceptions import ConnectionClosedOK
 
 from . import functions
+from .audio_cache_manager import AudioCacheManager
+from .live_flow_config import ControlEventConfig
+from .live_flow_config import LiveFlowConfig
+from .transcription_manager import TranscriptionManager
 from ...agents.base_agent import BaseAgent
 from ...agents.callback_context import CallbackContext
+from ...agents.invocation_context import AudioCacheEntry
 from ...agents.invocation_context import InvocationContext
 from ...agents.live_request_queue import LiveRequestQueue
 from ...agents.readonly_context import ReadonlyContext
@@ -61,9 +67,19 @@ class BaseLlmFlow(ABC):
   This flow ends when it transfer to another agent.
   """
 
-  def __init__(self):
+  def __init__(
+      self, 
+      live_flow_config: Optional[LiveFlowConfig] = None,
+      control_event_config: Optional[ControlEventConfig] = None
+  ):
     self.request_processors: list[BaseLlmRequestProcessor] = []
     self.response_processors: list[BaseLlmResponseProcessor] = []
+    
+    # Initialize configuration and managers
+    self.live_flow_config = live_flow_config or LiveFlowConfig()
+    self.control_event_config = control_event_config or ControlEventConfig()
+    self.audio_cache_manager = AudioCacheManager(self.live_flow_config.audio_cache_config)
+    self.transcription_manager = TranscriptionManager()
 
   async def run_live(
       self,
@@ -114,10 +130,7 @@ class BaseLlmFlow(ABC):
 
       try:
         async for event in self._receive_from_model(
-            llm_connection,
-            event_id,
-            invocation_context,
-            llm_request,
+            llm_connection, event_id, invocation_context, llm_request
         ):
           # Empty event means the queue is closed.
           if not event:
@@ -135,7 +148,7 @@ class BaseLlmFlow(ABC):
               and event.content.parts[0].function_response.name
               == 'transfer_to_agent'
           ):
-            await asyncio.sleep(1)
+            await asyncio.sleep(self.live_flow_config.transfer_agent_delay)
             # cancel the tasks that belongs to the closed connection.
             send_task.cancel()
             await llm_connection.close()
@@ -147,7 +160,7 @@ class BaseLlmFlow(ABC):
               == 'task_completed'
           ):
             # this is used for sequential agent to signal the end of the agent.
-            await asyncio.sleep(1)
+            await asyncio.sleep(self.live_flow_config.task_completion_delay)
             # cancel the tasks that belongs to the closed connection.
             send_task.cancel()
             return
@@ -174,7 +187,7 @@ class BaseLlmFlow(ABC):
         # event loop to process events.
         # TODO: revert back(remove timeout) once we move off streamlit.
         live_request = await asyncio.wait_for(
-            live_request_queue.get(), timeout=0.25
+            live_request_queue.get(), timeout=self.live_flow_config.request_queue_timeout
         )
         # duplicate the live_request to all the active streams
         logger.debug(
@@ -204,6 +217,12 @@ class BaseLlmFlow(ABC):
           invocation_context.transcription_cache.append(
               TranscriptionEntry(role='user', data=live_request.blob)
           )
+        
+        # Cache input audio chunks before flushing
+        self.audio_cache_manager.cache_input_audio(
+            invocation_context, live_request.blob
+        )
+        
         await llm_connection.send_realtime(live_request.blob)
       if live_request.content:
         await llm_connection.send_content(live_request.content)
@@ -244,6 +263,23 @@ class BaseLlmFlow(ABC):
               invocation_id=invocation_context.invocation_id,
               author=get_author_for_event(llm_response),
           )
+          
+          # Handle transcription events ONCE per llm_response, outside the event loop
+          if llm_response.input_transcription:
+            await self.transcription_manager.handle_input_transcription(
+                invocation_context, 
+                llm_response.input_transcription
+            )
+          
+          if llm_response.output_transcription:
+            await self.transcription_manager.handle_output_transcription(
+                invocation_context, 
+                llm_response.output_transcription
+            )
+          
+          # Flush audio caches based on control events using configurable settings
+          await self._handle_control_event_flush(invocation_context, llm_response)
+          
           async for event in self._postprocess_live(
               invocation_context,
               llm_request,
@@ -268,7 +304,28 @@ class BaseLlmFlow(ABC):
                       role=event.content.role, data=event.content
                   )
               )
+            
+            # Cache output audio chunks from model responses
+            if (
+                event.content
+                and event.content.parts
+                and event.content.parts[0].inline_data
+                and event.content.parts[0].inline_data.mime_type.startswith('audio/')
+            ):
+              audio_blob = types.Blob(
+                  data=event.content.parts[0].inline_data.data,
+                  mime_type=event.content.parts[0].inline_data.mime_type
+              )
+              self.audio_cache_manager.cache_output_audio(
+                  invocation_context, audio_blob
+              )
+            
             yield event
+            
+          # If turn is complete, exit the flow
+          if llm_response.turn_complete:
+            return
+            
         # Give opportunity for other tasks to run.
         await asyncio.sleep(0)
     except ConnectionClosedOK:
@@ -421,12 +478,14 @@ class BaseLlmFlow(ABC):
 
     # Skip the model response event if there is no content and no error code.
     # This is needed for the code executor to trigger another loop.
-    # But don't skip control events like turn_complete.
+    # But don't skip control events like turn_complete or transcription events.
     if (
         not llm_response.content
         and not llm_response.error_code
         and not llm_response.interrupted
         and not llm_response.turn_complete
+        and not llm_response.input_transcription
+        and not llm_response.output_transcription
     ):
       return
 
@@ -635,6 +694,38 @@ class BaseLlmFlow(ABC):
         )
 
     return model_response_event
+
+  async def _handle_control_event_flush(
+      self,
+      invocation_context: InvocationContext,
+      llm_response: LlmResponse
+  ) -> None:
+    """Handle audio cache flushing based on control events.
+    
+    Args:
+      invocation_context: The invocation context containing audio caches.
+      llm_response: The LLM response containing control event information.
+    """
+    if llm_response.interrupted:
+      flush_user, flush_model = self.control_event_config.get_flush_settings('interrupted')
+      await self.audio_cache_manager.flush_caches(
+          invocation_context, flush_user_audio=flush_user, flush_model_audio=flush_model
+      )
+    elif llm_response.turn_complete:
+      flush_user, flush_model = self.control_event_config.get_flush_settings('turn_complete')
+      await self.audio_cache_manager.flush_caches(
+          invocation_context, flush_user_audio=flush_user, flush_model_audio=flush_model
+      )
+    elif getattr(llm_response, 'generation_complete', False):
+      flush_user, flush_model = self.control_event_config.get_flush_settings('generation_complete')
+      await self.audio_cache_manager.flush_caches(
+          invocation_context, flush_user_audio=flush_user, flush_model_audio=flush_model
+      )
+    
+    # Log cache statistics if enabled
+    if self.live_flow_config.enable_cache_statistics:
+      stats = self.audio_cache_manager.get_cache_stats(invocation_context)
+      logger.debug('Audio cache stats: %s', stats)
 
   def __get_llm(self, invocation_context: InvocationContext) -> BaseLlm:
     from ...agents.llm_agent import LlmAgent
