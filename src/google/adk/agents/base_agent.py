@@ -19,9 +19,12 @@ from typing import Any
 from typing import AsyncGenerator
 from typing import Awaitable
 from typing import Callable
+from typing import Dict
 from typing import final
+from typing import Literal
 from typing import Mapping
 from typing import Optional
+from typing import Type
 from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
@@ -36,6 +39,7 @@ from typing_extensions import override
 from typing_extensions import TypeAlias
 
 from ..events.event import Event
+from ..utils.feature_decorator import working_in_progress
 from .callback_context import CallbackContext
 
 if TYPE_CHECKING:
@@ -124,6 +128,25 @@ class BaseAgent(BaseModel):
       When the content is present, the provided content will be used as agent
       response and appended to event history as agent response.
   """
+
+  @working_in_progress('BaseAgentConfig is not ready for use.')
+  class BaseAgentConfig(BaseModel):
+    """The config for the YAML schema of a BaseAgent.
+
+    Do not use this class directly. It's the base class for all agent configs.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    agent_class: Literal['BaseAgent'] = 'BaseAgent'
+    """Required. The class of the agent. The value is used to differentiate
+    among different agent classes."""
+
+    name: str
+    """Required. The name of the agent."""
+
+    description: str = ''
+    """Optional. The description of the agent."""
 
   def clone(
       self: SelfAgent, update: Mapping[str, Any] | None = None
@@ -439,3 +462,46 @@ class BaseAgent(BaseModel):
         )
       sub_agent.parent_agent = self
     return self
+
+  @classmethod
+  @working_in_progress('BaseAgent.from_config is not ready for use.')
+  def from_config(
+      cls: Type[SelfAgent],
+      config: BaseAgent.BaseAgentConfig,
+  ) -> SelfAgent:
+    """Creates an agent from a config.
+
+    This method converts fields in a config to the corresponding
+    fields in an agent.
+    Args:
+      config: The config to create the agent from.
+
+    Returns:
+      The created agent.
+    """
+    kwargs: Dict[str, Any] = {
+        'name': config.name,
+        'description': config.description,
+    }
+    return cls._from_config_impl(kwargs, config)
+
+  @classmethod
+  @working_in_progress('BaseAgent._from_config_impl is not ready for use.')
+  def _from_config_impl(
+      cls: Type[SelfAgent],
+      kwargs: Dict[str, Any],
+      config: BaseAgent.BaseAgentConfig,
+  ) -> SelfAgent:
+    """The custom implementation by sub-classes to create an agent from a config.
+
+    Child classes should implement this.
+
+    Args:
+      kwargs: The keyword arguments to create the agent from, passed from
+        from_config().
+      config: The config to create the agent from.
+
+    Returns:
+      The created agent.
+    """
+    return cls(**kwargs)

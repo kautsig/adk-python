@@ -20,8 +20,10 @@ from typing import Any
 from typing import AsyncGenerator
 from typing import Awaitable
 from typing import Callable
+from typing import Dict
 from typing import Literal
 from typing import Optional
+from typing import Type
 from typing import Union
 
 from google.genai import types
@@ -48,6 +50,7 @@ from ..tools.base_tool import BaseTool
 from ..tools.base_toolset import BaseToolset
 from ..tools.function_tool import FunctionTool
 from ..tools.tool_context import ToolContext
+from ..utils.feature_decorator import working_in_progress
 from .base_agent import BaseAgent
 from .callback_context import CallbackContext
 from .invocation_context import InvocationContext
@@ -267,6 +270,20 @@ class LlmAgent(BaseAgent):
     When present, the returned dict will be used as tool result.
   """
   # Callbacks - End
+
+  class LlmAgentConfig(BaseAgent.BaseAgentConfig):
+    """The config for the YAML schema of a LlmAgent."""
+
+    agent_class: Literal['LlmAgent', ''] = 'LlmAgent'
+    """The value is used to uniquely identify the LlmAgent class. If it is
+    empty, it is by default an LlmAgent."""
+
+    model: Optional[str] = None
+    """Optional. LlmAgent.model. If not set, the model will be inherited from
+    the ancestor."""
+
+    instruction: str
+    """Required. LlmAgent.instruction."""
 
   @override
   async def _run_async_impl(
@@ -515,6 +532,20 @@ class LlmAgent(BaseAgent):
           'Response schema must be set via LlmAgent.output_schema.'
       )
     return generate_content_config
+
+  @classmethod
+  @override
+  @working_in_progress('LlmAgent._from_config_impl is not ready for use.')
+  def _from_config_impl(
+      cls: Type[LlmAgent],
+      kwargs: Dict[str, Any],
+      config: LlmAgent.LlmAgentConfig,
+  ) -> LlmAgent:
+    if config.model:
+      kwargs['model'] = config.model
+    if config.instruction:
+      kwargs['instruction'] = config.instruction
+    return cls(**kwargs)
 
 
 Agent: TypeAlias = LlmAgent

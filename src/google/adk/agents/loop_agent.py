@@ -16,13 +16,18 @@
 
 from __future__ import annotations
 
+from typing import Any
 from typing import AsyncGenerator
+from typing import Dict
+from typing import Literal
 from typing import Optional
+from typing import Type
 
 from typing_extensions import override
 
 from ..agents.invocation_context import InvocationContext
 from ..events.event import Event
+from ..utils.feature_decorator import working_in_progress
 from .base_agent import BaseAgent
 
 
@@ -39,6 +44,15 @@ class LoopAgent(BaseAgent):
   If not set, the loop agent will run indefinitely until a sub-agent
   escalates.
   """
+
+  @working_in_progress('LoopAgentConfig is not ready for use.')
+  class LoopAgentConfig(BaseAgent.BaseAgentConfig):
+    """The config for the YAML schema of a LoopAgent."""
+
+    agent_class: Literal['LoopAgent'] = 'LoopAgent'
+
+    max_iterations: Optional[int] = None
+    """Optional. LoopAgent.max_iterations."""
 
   @override
   async def _run_async_impl(
@@ -60,3 +74,15 @@ class LoopAgent(BaseAgent):
   ) -> AsyncGenerator[Event, None]:
     raise NotImplementedError('This is not supported yet for LoopAgent.')
     yield  # AsyncGenerator requires having at least one yield statement
+
+  @classmethod
+  @override
+  @working_in_progress('LoopAgent._from_config_impl is not ready for use.')
+  def _from_config_impl(
+      cls: Type[LoopAgent],
+      kwargs: Dict[str, Any],
+      config: LoopAgent.LoopAgentConfig,
+  ) -> LoopAgent:
+    if config.max_iterations:
+      kwargs['max_iterations'] = config.max_iterations
+    return cls(**kwargs)
