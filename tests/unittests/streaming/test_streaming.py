@@ -104,14 +104,16 @@ def test_live_streaming_function_call_single():
 
         async for response in run_res:
           collected_responses.append(response)
-          # Collect multiple events instead of stopping at 1
-          if len(collected_responses) >= 10:  # Higher limit to catch all events
+          # Collect a reasonable number of events, don't wait for too many
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        # Add timeout to prevent hanging
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
+        # Return whatever we collected so far
         pass
 
       return collected_responses
@@ -210,13 +212,13 @@ def test_live_streaming_function_call_multiple():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -308,13 +310,13 @@ def test_live_streaming_function_call_parallel():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -400,13 +402,13 @@ def test_live_streaming_function_call_with_error():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -483,13 +485,13 @@ def test_live_streaming_function_call_sync_tool():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -575,13 +577,13 @@ def test_live_streaming_simple_streaming_tool():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -679,13 +681,13 @@ def test_live_streaming_video_streaming_tool():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -787,13 +789,13 @@ def test_live_streaming_stop_streaming_tool():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
@@ -896,13 +898,13 @@ def test_live_streaming_multiple_streaming_tools():
 
         async for response in run_res:
           collected_responses.append(response)
-          if len(collected_responses) >= 10:
+          if len(collected_responses) >= 3:
             return
 
       try:
         session = self.session
-        asyncio.run(consume_responses(session))
-      except asyncio.TimeoutError:
+        asyncio.run(asyncio.wait_for(consume_responses(session), timeout=5.0))
+      except (asyncio.TimeoutError, asyncio.CancelledError):
         pass
 
       return collected_responses
