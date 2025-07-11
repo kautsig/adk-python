@@ -26,7 +26,7 @@ import uuid
 
 try:
   from a2a.client import A2AClient
-  from a2a.client.client import A2ACardResolver  # Import A2ACardResolver
+  from a2a.client.client import A2ACardResolver
   from a2a.types import AgentCard
   from a2a.types import Message as A2AMessage
   from a2a.types import MessageSendParams as A2AMessageSendParams
@@ -35,6 +35,7 @@ try:
   from a2a.types import SendMessageRequest
   from a2a.types import SendMessageSuccessResponse
   from a2a.types import Task as A2ATask
+  from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 except ImportError as e:
   import sys
@@ -63,10 +64,17 @@ from ..flows.llm_flows.functions import find_matching_function_call
 from ..utils.feature_decorator import experimental
 from .base_agent import BaseAgent
 
+__all__ = [
+    "RemoteA2aAgent",
+    "AgentCardResolutionError",
+    "A2AClientError",
+    "AGENT_CARD_WELL_KNOWN_PATH",
+]
+
+
 # Constants
 A2A_METADATA_PREFIX = "a2a:"
 DEFAULT_TIMEOUT = 600.0
-
 
 logger = logging.getLogger("google_adk." + __name__)
 
