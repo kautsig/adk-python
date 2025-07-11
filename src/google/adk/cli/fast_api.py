@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import yaml
 from contextlib import asynccontextmanager
 import json
 import logging
@@ -208,6 +209,12 @@ class RunEvalResult(common.BaseModel):
 class GetEventGraphResult(common.BaseModel):
   dot_src: str
 
+class AgentBuildRequest(common.BaseModel):
+  agent_name: str
+  agent_type: str
+  model: str
+  description: str
+  instruction: str
 
 def get_fast_api_app(
     *,
@@ -802,6 +809,28 @@ def get_fast_api_app(
         session_id=session_id,
         filename=artifact_name,
     )
+
+  @app.post("/builder/build", response_model_exclude_none=True)
+  async def builder_build(req: AgentBuildRequest):
+    base_path = Path.cwd() / agents_dir
+    agent = {
+        "agent_class": req.agent_type,
+        "name": req.agent_name,
+        "model": req.model,
+        "description": req.description,
+        "instruction": f"""{req.instruction}""",
+    }
+    try:
+      agent_dir = os.path.join(base_path, req.agent_name)
+      os.makedirs(agent_dir, exist_ok=True)
+      file_path = os.path.join(agent_dir, "root_agent.yaml")
+      with open(file_path, 'w') as file:
+        yaml.dump(agent, file, default_flow_style=False)
+      agent_loader.load_agent(agent_name=req.agent_name)
+      return True
+    except Exception as e:
+      logger.exception("Error in builder_build: %s", e)
+      return False
 
   @app.post("/run", response_model_exclude_none=True)
   async def agent_run(req: AgentRunRequest) -> list[Event]:
