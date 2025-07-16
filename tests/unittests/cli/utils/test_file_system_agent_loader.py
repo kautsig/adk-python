@@ -18,13 +18,13 @@ import sys
 import tempfile
 from textwrap import dedent
 
-from google.adk.cli.utils.agent_loader import AgentLoader
+from google.adk.cli.utils.file_system_agent_loader import FileSystemAgentLoader
 from pydantic import ValidationError
 import pytest
 
 
-class TestAgentLoader:
-  """Unit tests for AgentLoader focusing on interface behavior."""
+class TestFileSystemAgentLoader:
+  """Unit tests for FileSystemAgentLoader focusing on interface behavior."""
 
   @pytest.fixture(autouse=True)
   def cleanup_sys_path(self):
@@ -47,7 +47,8 @@ class TestAgentLoader:
     Args:
         temp_dir: The temporary directory to create the agent in
         agent_name: Name of the agent
-        structure_type: One of 'module', 'package_with_root', 'package_with_agent_module'
+        structure_type: One of 'module', 'package_with_root',
+          'package_with_agent_module'
     """
     if structure_type == "module":
       # Structure: agents_dir/agent_name.py
@@ -140,7 +141,7 @@ class TestAgentLoader:
       self.create_agent_structure(temp_path, "module_agent", "module")
 
       # Load the agent
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent = loader.load_agent("module_agent")
 
       # Assert agent was loaded correctly
@@ -159,7 +160,7 @@ class TestAgentLoader:
       )
 
       # Load the agent
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent = loader.load_agent("package_agent")
 
       # Assert agent was loaded correctly
@@ -177,7 +178,7 @@ class TestAgentLoader:
       )
 
       # Load the agent
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent = loader.load_agent("modular_agent")
 
       # Assert agent was loaded correctly
@@ -193,7 +194,7 @@ class TestAgentLoader:
       self.create_agent_structure(temp_path, "cached_agent", "module")
 
       # Load the agent twice
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent1 = loader.load_agent("cached_agent")
       agent2 = loader.load_agent("cached_agent")
 
@@ -215,7 +216,7 @@ class TestAgentLoader:
       )
 
       # Load the agent
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent = loader.load_agent("env_agent")
 
       # Assert environment variables were loaded
@@ -250,7 +251,7 @@ class TestAgentLoader:
                 root_agent = SubmoduleAgent()
             """))
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent = loader.load_agent(agent_name)
 
       # Assert that the module version was loaded due to the new loading order
@@ -269,7 +270,7 @@ class TestAgentLoader:
       )
 
       # Load all agents
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       agent1 = loader.load_agent("agent_one")
       agent2 = loader.load_agent("agent_two")
       agent3 = loader.load_agent("agent_three")
@@ -285,7 +286,7 @@ class TestAgentLoader:
   def test_agent_not_found_error(self):
     """Test that appropriate error is raised when agent is not found."""
     with tempfile.TemporaryDirectory() as temp_dir:
-      loader = AgentLoader(temp_dir)
+      loader = FileSystemAgentLoader(temp_dir)
       agents_dir = temp_dir  # For use in the expected message string
 
       # Try to load non-existent agent
@@ -321,7 +322,7 @@ class TestAgentLoader:
                 # Note: No root_agent defined
             """))
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
 
       # Try to load agent without root_agent
       with pytest.raises(ValueError) as exc_info:
@@ -348,7 +349,7 @@ class TestAgentLoader:
                 root_agent = {agent_name.title()}Agent()
             """))
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       with pytest.raises(ModuleNotFoundError) as exc_info:
         loader.load_agent(agent_name)
 
@@ -376,7 +377,7 @@ class TestAgentLoader:
                 root_agent = {agent_name.title()}Agent()
             """))
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       # SyntaxError is a subclass of Exception, and importlib might wrap it
       # The loader is expected to prepend its message and re-raise.
       with pytest.raises(
@@ -411,7 +412,7 @@ class TestAgentLoader:
                 root_agent = {agent_name.title()}Agent()
             """))
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
       # SyntaxError is a subclass of Exception, and importlib might wrap it
       # The loader is expected to prepend its message and re-raise.
       with pytest.raises(
@@ -436,7 +437,7 @@ class TestAgentLoader:
       # Check sys.path before
       assert str(temp_path) not in sys.path
 
-      loader = AgentLoader(str(temp_path))
+      loader = FileSystemAgentLoader(str(temp_path))
 
       # Path should not be added yet - only added during load
       assert str(temp_path) not in sys.path

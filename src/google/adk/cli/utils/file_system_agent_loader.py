@@ -17,22 +17,26 @@ from __future__ import annotations
 import importlib
 import logging
 import os
+from pathlib import Path
 import sys
 from typing import Optional
 
+from google.adk.cli.utils import envs
 from pydantic import ValidationError
+from typing_extensions import override
 
-from . import envs
 from ...agents import config_agent_utils
 from ...agents.base_agent import BaseAgent
 from ...utils.feature_decorator import working_in_progress
+from .base_agent_loader import BaseAgentLoader
 
 logger = logging.getLogger("google_adk." + __name__)
 
 
-class AgentLoader:
+class FileSystemAgentLoader(BaseAgentLoader):
   """Centralized agent loading with proper isolation, caching, and .env loading.
-  Support loading agents from below folder/file structures:
+
+  Supports loading agents from below folder/file structures:
   a)  {agent_name}.agent as a module name:
       agents_dir/{agent_name}/agent.py (with root_agent defined in the module)
   b)  {agent_name} as a module name
@@ -41,7 +45,6 @@ class AgentLoader:
       agents_dir/{agent_name}/__init__.py (with root_agent in the package)
   d)  {agent_name} as a YAML config folder:
       agents_dir/{agent_name}/root_agent.yaml defines the root agent
-
   """
 
   def __init__(self, agents_dir: str):
@@ -188,6 +191,7 @@ class AgentLoader:
         " exposed."
     )
 
+  @override
   def load_agent(self, agent_name: str) -> BaseAgent:
     """Load an agent module (with caching & .env) and return its root_agent."""
     if agent_name in self._agent_cache:
@@ -198,6 +202,20 @@ class AgentLoader:
     agent = self._perform_load(agent_name)
     self._agent_cache[agent_name] = agent
     return agent
+
+  @override
+  def list_agents(self) -> list[str]:
+    """Lists all agents available in the agent loader."""
+    base_path = Path.cwd() / self.agents_dir
+    agent_names = [
+        x
+        for x in os.listdir(base_path)
+        if os.path.isdir(os.path.join(base_path, x))
+        and not x.startswith(".")
+        and x != "__pycache__"
+    ]
+    agent_names.sort()
+    return agent_names
 
   def remove_agent_from_cache(self, agent_name: str):
     # Clear module cache for the agent and its submodules

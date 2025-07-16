@@ -31,7 +31,7 @@ from ..sessions.base_session_service import BaseSessionService
 from ..sessions.in_memory_session_service import InMemorySessionService
 from ..sessions.session import Session
 from .utils import envs
-from .utils.agent_loader import AgentLoader
+from .utils.file_system_agent_loader import FileSystemAgentLoader
 
 
 class InputFile(BaseModel):
@@ -137,7 +137,7 @@ async def run_cli(
   session = await session_service.create_session(
       app_name=agent_folder_name, user_id=user_id
   )
-  root_agent = AgentLoader(agents_dir=agent_parent_dir).load_agent(
+  root_agent = FileSystemAgentLoader(agents_dir=agent_parent_dir).load_agent(
       agent_folder_name
   )
   envs.load_dotenv_for_agent(agent_folder_name, agent_parent_dir)
