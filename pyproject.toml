@@ -28,6 +28,7 @@ dependencies = [
   "PyYAML>=6.0.2",                                  # For APIHubToolset.
   "anyio>=4.9.0;python_version>='3.10'",            # For MCP Session Manager
   "authlib>=1.5.1",                                 # For RestAPI Tool
+  "backoff>=2.2.1",                                # For LLM Retries
   "click>=8.1.8",                                   # For CLI tools
   "fastapi>=0.115.0",                               # FastAPI framework
   "google-api-python-client>=2.157.0",              # Google API client discovery

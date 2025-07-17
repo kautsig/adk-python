@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 from functools import cached_property
+from functools import partial
 import logging
 import os
 import sys
@@ -25,8 +26,11 @@ from typing import cast
 from typing import TYPE_CHECKING
 from typing import Union
 
+import backoff
 from google.genai import Client
 from google.genai import types
+from google.genai.errors import ClientError
+from google.genai.errors import ServerError
 from google.genai.types import FinishReason
 from typing_extensions import override
 
@@ -46,6 +50,19 @@ _NEW_LINE = '\n'
 _EXCLUDED_PART_FIELD = {'inline_data': {'data'}}
 _AGENT_ENGINE_TELEMETRY_TAG = 'remote_reasoning_engine'
 _AGENT_ENGINE_TELEMETRY_ENV_VARIABLE_NAME = 'GOOGLE_CLOUD_AGENT_ENGINE_ID'
+DEFAULT_NETWORK_RETRIES = 4
+
+
+def give_up_non_retryable_error(error: Exception) -> bool:
+  """Returns True if the error is non-retryable."""
+  # Retry on Resource exhausted error
+  if isinstance(error, ClientError) and error.code == 429:
+    return False
+
+  # Retry on Service unavailable error
+  if isinstance(error, ServerError) and error.code == 503:
+    return False
+  return True
 
 
 class Gemini(BaseLlm):
@@ -56,6 +73,22 @@ class Gemini(BaseLlm):
   """
 
   model: str = 'gemini-1.5-flash'
+
+  # Implementation for exponential backoff.
+  # Note: backoff.on_exception is a decorator, but it cannot properly decorate \
+  # the generate_content_async function.
+  # This is because backoff generate_content_async is an AsyncGenerator.
+  # Backoff library uses asyncio.iscorotinefunction to detect sync/async
+  # functions, which cannot recognize AsyncGenerator. Consequently, backoff
+  # fails to catch the exception ingenerate_content_async.
+  # Therefore, it requires applying the decorator manually to inner calls
+  # to genai.client.
+  exponential_backoff = backoff.on_exception(
+      wait_gen=partial(backoff.expo, factor=5),  # 5 seconds * 2 ^ retries
+      exception=(ClientError, ServerError),
+      max_tries=DEFAULT_NETWORK_RETRIES,
+      giveup=give_up_non_retryable_error,
+  )
 
   @staticmethod
   @override
@@ -104,7 +137,13 @@ class Gemini(BaseLlm):
       llm_request.config.http_options.headers.update(self._tracking_headers)
 
     if stream:
-      responses = await self.api_client.aio.models.generate_content_stream(
+      generate_content_stream_func = (
+          self.api_client.aio.models.generate_content_stream
+      )
+      response_stream_gen = Gemini.exponential_backoff(
+          generate_content_stream_func
+      )
+      responses = await response_stream_gen(
           model=llm_request.model,
           contents=llm_request.contents,
           config=llm_request.config,
@@ -172,7 +211,9 @@ class Gemini(BaseLlm):
         )
 
     else:
-      response = await self.api_client.aio.models.generate_content(
+      generate_content_func = self.api_client.aio.models.generate_content
+      responses = Gemini.exponential_backoff(generate_content_func)
+      response = await responses(
           model=llm_request.model,
           contents=llm_request.contents,
           config=llm_request.config,
