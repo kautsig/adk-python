@@ -342,7 +342,7 @@ class BaseLlmFlow(ABC):
 
     # Run processors for tools.
     for tool in await agent.canonical_tools(
-        ReadonlyContext(invocation_context)
+        ReadonlyContext(invocation_context), with_toolset=True
     ):
       tool_context = ToolContext(invocation_context)
       await tool.process_llm_request(

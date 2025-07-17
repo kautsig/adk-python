@@ -110,14 +110,18 @@ ExamplesUnion = Union[list[Example], BaseExampleProvider]
 
 
 async def _convert_tool_union_to_tools(
-    tool_union: ToolUnion, ctx: ReadonlyContext
-) -> list[BaseTool]:
+    tool_union: ToolUnion, ctx: ReadonlyContext, with_toolset: bool = False
+) -> list[Union[BaseTool, BaseToolset]]:
   if isinstance(tool_union, BaseTool):
     return [tool_union]
   if isinstance(tool_union, Callable):
     return [FunctionTool(func=tool_union)]
 
-  return await tool_union.get_tools(ctx)
+  return (
+      [tool_union] + await tool_union.get_tools(ctx)
+      if with_toolset
+      else await tool_union.get_tools(ctx)
+  )
 
 
 class LlmAgent(BaseAgent):
@@ -361,15 +365,17 @@ class LlmAgent(BaseAgent):
       return global_instruction, True
 
   async def canonical_tools(
-      self, ctx: ReadonlyContext = None
-  ) -> list[BaseTool]:
+      self, ctx: ReadonlyContext = None, with_toolset: bool = False
+  ) -> list[Union[BaseTool, BaseToolset]]:
     """The resolved self.tools field as a list of BaseTool based on the context.
 
     This method is only for use by Agent Development Kit.
     """
     resolved_tools = []
     for tool_union in self.tools:
-      resolved_tools.extend(await _convert_tool_union_to_tools(tool_union, ctx))
+      resolved_tools.extend(
+          await _convert_tool_union_to_tools(tool_union, ctx, with_toolset)
+      )
     return resolved_tools
 
   @property

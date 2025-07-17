@@ -21,11 +21,13 @@ from typing import Optional
 from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.loop_agent import LoopAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.registry import LLMRegistry
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.base_toolset import BaseToolset
+from google.adk.tools.function_tool import FunctionTool
 from google.genai import types
 from pydantic import BaseModel
 import pytest
@@ -280,3 +282,160 @@ def test_allow_transfer_by_default():
 
   assert not agent.disallow_transfer_to_parent
   assert not agent.disallow_transfer_to_peers
+
+
+@pytest.mark.asyncio
+async def test_canonical_tools_without_toolset():
+  """Test canonical_tools returns only tools when with_toolset=False (default)."""
+
+  def _test_function():
+    pass
+
+  class _TestToolset(BaseToolset):
+
+    async def get_tools(self, readonly_context=None):
+      return [FunctionTool(func=_test_function)]
+
+    async def close(self):
+      pass
+
+  toolset = _TestToolset()
+  agent = LlmAgent(name='test_agent', tools=[toolset])
+  ctx = await _create_readonly_context(agent)
+
+  tools = await agent.canonical_tools(ctx)
+
+  # Should only return tools, not the toolset itself
+  assert len(tools) == 1
+  assert all(isinstance(tool, BaseTool) for tool in tools)
+  assert isinstance(tools[0], FunctionTool)
+
+
+@pytest.mark.asyncio
+async def test_canonical_tools_with_toolset():
+  """Test canonical_tools returns tools and toolsets when with_toolset=True."""
+
+  def _test_function():
+    pass
+
+  class _TestToolset(BaseToolset):
+
+    async def get_tools(self, readonly_context=None):
+      return [FunctionTool(func=_test_function)]
+
+    async def close(self):
+      pass
+
+  toolset = _TestToolset()
+  agent = LlmAgent(name='test_agent', tools=[toolset])
+  ctx = await _create_readonly_context(agent)
+
+  tools = await agent.canonical_tools(ctx, with_toolset=True)
+
+  # Should return both the toolset and its tools
+  assert len(tools) == 2
+  assert any(isinstance(item, BaseToolset) for item in tools)
+  assert any(isinstance(item, BaseTool) for item in tools)
+
+
+@pytest.mark.asyncio
+async def test_canonical_tools_mixed_tools_and_toolsets():
+  """Test canonical_tools with mixed tools, functions, and toolsets."""
+
+  def _test_function():
+    pass
+
+  class _TestTool(BaseTool):
+
+    def __init__(self):
+      super().__init__(name='test_tool', description='Test tool')
+
+    async def call(self, **kwargs):
+      return 'test'
+
+  class _TestToolset(BaseToolset):
+
+    async def get_tools(self, readonly_context=None):
+      return [_TestTool()]
+
+    async def close(self):
+      pass
+
+  direct_tool = _TestTool()
+  toolset = _TestToolset()
+
+  agent = LlmAgent(
+      name='test_agent', tools=[direct_tool, _test_function, toolset]
+  )
+  ctx = await _create_readonly_context(agent)
+
+  # Test without toolset
+  tools_only = await agent.canonical_tools(ctx, with_toolset=False)
+  assert len(tools_only) == 3  # direct_tool + function_tool + toolset's tool
+  assert all(isinstance(tool, BaseTool) for tool in tools_only)
+
+  # Test with toolset
+  tools_with_toolset = await agent.canonical_tools(ctx, with_toolset=True)
+  assert (
+      len(tools_with_toolset) == 4
+  )  # direct_tool + function_tool + toolset + toolset's tool
+  assert (
+      sum(1 for item in tools_with_toolset if isinstance(item, BaseToolset))
+      == 1
+  )
+  assert (
+      sum(1 for item in tools_with_toolset if isinstance(item, BaseTool)) == 3
+  )
+
+
+@pytest.mark.asyncio
+async def test_convert_tool_union_to_tools():
+  """Test the _convert_tool_union_to_tools function with different tool types."""
+  from google.adk.agents.llm_agent import _convert_tool_union_to_tools
+
+  def _test_function():
+    pass
+
+  class _TestTool(BaseTool):
+
+    def __init__(self):
+      super().__init__(name='test_tool', description='Test tool')
+
+    async def call(self, **kwargs):
+      return 'test'
+
+  class _TestToolset(BaseToolset):
+
+    async def get_tools(self, readonly_context=None):
+      return [_TestTool()]
+
+    async def close(self):
+      pass
+
+  agent = LlmAgent(name='test_agent')
+  ctx = await _create_readonly_context(agent)
+
+  # Test with BaseTool
+  tool = _TestTool()
+  result = await _convert_tool_union_to_tools(tool, ctx, with_toolset=False)
+  assert len(result) == 1
+  assert isinstance(result[0], BaseTool)
+
+  # Test with function
+  result = await _convert_tool_union_to_tools(
+      _test_function, ctx, with_toolset=False
+  )
+  assert len(result) == 1
+  assert isinstance(result[0], FunctionTool)
+
+  # Test with toolset without including toolset
+  toolset = _TestToolset()
+  result = await _convert_tool_union_to_tools(toolset, ctx, with_toolset=False)
+  assert len(result) == 1
+  assert isinstance(result[0], BaseTool)
+
+  # Test with toolset including toolset
+  result = await _convert_tool_union_to_tools(toolset, ctx, with_toolset=True)
+  assert len(result) == 2
+  assert any(isinstance(item, BaseToolset) for item in result)
+  assert any(isinstance(item, BaseTool) for item in result)
