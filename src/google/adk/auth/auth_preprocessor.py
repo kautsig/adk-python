@@ -75,8 +75,15 @@ class _AuthLlmRequestProcessor(BaseLlmRequestProcessor):
     if not request_euc_function_call_ids:
       return
 
+    seen_responses = set()
     for i in range(len(events) - 2, -1, -1):
       event = events[i]
+
+      # remember what not to resume
+      for response in event.get_function_responses():
+        if not response.id in event.actions.requested_auth_configs:
+          seen_responses.add(response.id)
+
       # looking for the system long running request euc function call
       function_calls = event.get_function_calls()
       if not function_calls:
@@ -86,6 +93,8 @@ class _AuthLlmRequestProcessor(BaseLlmRequestProcessor):
 
       for function_call in function_calls:
         if function_call.id not in request_euc_function_call_ids:
+          continue
+        if function_call.id in seen_responses:
           continue
         args = AuthToolArguments.model_validate(function_call.args)
 
