@@ -11,15 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
 
-from google.adk.evaluation.agent_evaluator import AgentEvaluator
-import pytest
+from typing import Generic
+from typing import TypeVar
+
+import pydantic
+
+T = TypeVar("T")
 
 
-@pytest.mark.asyncio
-async def test_eval_agent():
-  await AgentEvaluator.evaluate(
-      agent_module="tests.integration.fixture.home_automation_agent",
-      eval_dataset_file_path_or_dir="tests/integration/fixture/home_automation_agent/simple_test.test.json",
-      num_runs=4,
+class SharedValue(pydantic.BaseModel, Generic[T]):
+  """Simple wrapper around a value to allow modifying it from callbacks."""
+
+  model_config = pydantic.ConfigDict(
+      arbitrary_types_allowed=True,
   )
+  value: T
